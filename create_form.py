@@ -3,6 +3,7 @@ import glob
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
@@ -737,6 +738,21 @@ async def generate_pdf_from_json(json_data: dict, output_dir: str = "latex") -> 
 
     final_tex_file = os.path.join(output_dir, "final_report.tex")
     final_pdf_file = os.path.join(output_dir, "final_report.pdf")
+
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Copy static images (obstruction.png and scope.png) to output directory
+    static_images = ["obstruction.png", "scope.png"]
+    for img in static_images:
+        src_path = os.path.join("latex", img)
+        if os.path.exists(src_path):
+            dst_path = os.path.join(output_dir, img)
+            try:
+                shutil.copy2(src_path, dst_path)
+                print(f"✓ Copied static image: {img}")
+            except Exception as e:
+                print(f"⚠️  Failed to copy {img}: {e}")
 
     # Load template
     template_file_path = (
