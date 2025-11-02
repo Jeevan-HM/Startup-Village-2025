@@ -1,7 +1,9 @@
 import asyncio
+import glob
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import urllib
 from io import BytesIO
@@ -14,7 +16,7 @@ from PIL import Image  # Requires 'pip install Pillow'
 JSON_FILE = "inspection.json"  # Assumes this is in the root, with the script
 TEMPLATE_FILE = "latex/report.tex"
 FINAL_TEX_FILE = "latex/final_report.tex"
-FINAL_PDF_FILE = "latex/final_report.pdf"
+FINAL_PDF_FILE = "final_report.pdf"
 IMAGE_DIR = "latex/images"  # <-- Images now INSIDE latex folder
 CONTENT_MARKER = "% --- PYTHON CONTENT MARKER ---"
 
@@ -407,14 +409,24 @@ async def main_async():
             text=True,
         )
 
-        print("📄 Running pdflatex (Pass 2)...")
-        result = subprocess.run(
-            ["pdflatex", "-interaction=nonstopmode", tex_filename_only],
-            check=True,
-            cwd=run_directory,
-            capture_output=True,
-            text=True,
-        )
+        # print("📄 Running pdflatex (Pass 2)...")
+        # result = subprocess.run(
+        #     ["pdflatex", "-interaction=nonstopmode", tex_filename_only],
+        #     check=True,
+        #     cwd=run_directory,
+        #     capture_output=True,
+        #     text=True,
+        # )
+
+        image_files = glob.glob(os.path.join(IMAGE_DIR, "*"))
+        for file_path in image_files:
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print(f"⚠️  Could not remove {file_path}: {e}")
 
         print("\n✅ Done! ✅")
         print(f"Successfully generated {FINAL_PDF_FILE}")
