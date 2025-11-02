@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Property Inspection Report Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-section">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 11V16M15 8V16M12 3L3 9V20H21V9L12 3Z" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <h1>Property Inspection Report Generator</h1>
+            </div>
+            <p class="subtitle">Generate professional PDF reports from your inspection JSON data</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">
+            <svg class="alert-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {% if category == 'success' %}
+                <path
+                    d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                {% else %}
+                <path
+                    d="M12 8V12M12 16H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                {% endif %}
+            </svg>
+            <span>{{ message }}</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="upload-card">
+            <div class="upload-icon-wrapper">
+                <svg class="upload-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                        d="M7 16V12M12 16V8M17 16V14M3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12Z"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </div>
+
+            <h2>Upload Inspection Data</h2>
+            <p class="upload-description">Select your inspection JSON file to generate a comprehensive PDF report</p>
+
+            <form action="/upload" method="post" enctype="multipart/form-data" id="uploadForm">
+                <div class="file-input-wrapper">
+                    <input type="file" name="file" id="fileInput" accept=".json" required>
+                    <label for="fileInput" class="file-label">
+                        <svg class="file-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7 10L12 15L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                            <path d="M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                            <path
+                                d="M20 21H4C3.44772 21 3 20.5523 3 20V4C3 3.44772 3.44772 3 4 3H20C20.5523 3 21 3.44772 21 4V20C21 20.5523 20.5523 21 20 21Z"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <span class="file-label-text">Choose JSON file</span>
+                        <span class="file-name" id="fileName">No file chosen</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="submit-btn" id="submitBtn">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                            d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    Generate Report
+                </button>
+            </form>
+        </div>
+
+        <div class="features">
+            <div class="feature-card">
+                <svg class="feature-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M13 10V3L4 14H11L11 21L20 10L13 10Z" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <h3>Lightning Fast</h3>
+                <p>Optimized with async processing for rapid PDF generation</p>
+            </div>
+
+            <div class="feature-card">
+                <svg class="feature-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                        d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <h3>Professional Quality</h3>
+                <p>TREC-compliant reports with perfect formatting</p>
+            </div>
+
+            <div class="feature-card">
+                <svg class="feature-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                        d="M12 15V3M12 15L8 11M12 15L16 11M2 17L2.62 18.62C2.87265 19.3766 3.37764 20.0134 4.04811 20.4183C4.71858 20.8232 5.51286 21.0713 6.33 21.13L17.67 21.13C18.4871 21.0713 19.2814 20.8232 19.9519 20.4183C20.6224 20.0134 21.1274 19.3766 21.38 18.62L22 17"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <h3>Easy Download</h3>
+                <p>Instant PDF download ready for distribution</p>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <p>Powered by advanced async processing • Built with Flask & LaTeX</p>
+        </footer>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p class="loading-text" id="loadingText">Generating your report...</p>
+        <div class="progress-steps">
+            <div class="step active">📤 Uploading</div>
+            <div class="step">🖼️ Processing Images</div>
+            <div class="step">📝 Building Document</div>
+            <div class="step">📄 Creating PDF</div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const uploadForm = document.getElementById('uploadForm');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const fileLabel = document.querySelector('.file-label');
+
+        // File input change handler with animation
+        fileInput.addEventListener('change', function (e) {
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+                fileName.textContent = file.name;
+                fileName.classList.add('has-file');
+
+                // Add success animation
+                fileLabel.style.borderColor = '#10b981';
+                fileLabel.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05))';
+
+                // Create mini celebration effect
+                createCelebration(fileLabel);
+
+                setTimeout(() => {
+                    fileLabel.style.borderColor = '';
+                    fileLabel.style.background = '';
+                }, 1500);
+            } else {
+                fileName.textContent = 'No file chosen';
+                fileName.classList.remove('has-file');
+            }
+        });
+
+        // Fun celebration effect
+        function createCelebration(element) {
+            const colors = ['#667eea', '#764ba2', '#f093fb', '#10b981'];
+            for (let i = 0; i < 15; i++) {
+                const particle = document.createElement('div');
+                particle.style.position = 'absolute';
+                particle.style.width = '8px';
+                particle.style.height = '8px';
+                particle.style.borderRadius = '50%';
+                particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+                particle.style.pointerEvents = 'none';
+                particle.style.zIndex = '10000';
+
+                const rect = element.getBoundingClientRect();
+                particle.style.left = (rect.left + rect.width / 2) + 'px';
+                particle.style.top = (rect.top + rect.height / 2) + 'px';
+
+                document.body.appendChild(particle);
+
+                const angle = (Math.PI * 2 * i) / 15;
+                const velocity = 50 + Math.random() * 50;
+                const tx = Math.cos(angle) * velocity;
+                const ty = Math.sin(angle) * velocity;
+
+                particle.animate([
+                    { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+                    { transform: `translate(${tx}px, ${ty}px) scale(0)`, opacity: 0 }
+                ], {
+                    duration: 800,
+                    easing: 'cubic-bezier(0, .9, .57, 1)'
+                });
+
+                setTimeout(() => particle.remove(), 800);
+            }
+        }        // Drag and drop functionality
+        fileLabel.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            this.style.borderColor = '#667eea';
+            this.style.transform = 'scale(1.02)';
+        });
+
+        fileLabel.addEventListener('dragleave', function (e) {
+            e.preventDefault();
+            this.style.borderColor = '';
+            this.style.transform = '';
+        });
+
+        fileLabel.addEventListener('drop', function (e) {
+            e.preventDefault();
+            this.style.borderColor = '';
+            this.style.transform = '';
+
+            if (e.dataTransfer.files.length > 0) {
+                const file = e.dataTransfer.files[0];
+                if (file.name.endsWith('.json')) {
+                    fileInput.files = e.dataTransfer.files;
+                    fileName.textContent = file.name;
+                    fileName.classList.add('has-file');
+
+                    // Add success animation
+                    this.style.borderColor = '#10b981';
+                    this.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05))';
+
+                    // Celebration effect
+                    createCelebration(this);
+
+                    setTimeout(() => {
+                        this.style.borderColor = '';
+                        this.style.background = '';
+                    }, 1500);
+                } else {
+                    // Error shake animation
+                    this.style.animation = 'shake 0.5s';
+                    setTimeout(() => {
+                        this.style.animation = '';
+                    }, 500);
+                    alert('❌ Please upload a JSON file');
+                }
+            }
+        });        // Form submission with progress steps
+        let stepInterval;
+        let pollInterval;
+
+        uploadForm.addEventListener('submit', function (e) {
+            if (!fileInput.files.length) {
+                e.preventDefault();
+                alert('Please select a JSON file first');
+                return;
+            }
+
+            loadingOverlay.classList.add('active');
+
+            // Animate progress steps
+            const steps = document.querySelectorAll('.step');
+            let currentStep = 0;
+
+            stepInterval = setInterval(() => {
+                if (currentStep < steps.length) {
+                    steps.forEach(s => s.classList.remove('active'));
+                    steps[currentStep].classList.add('active');
+                    currentStep++;
+                } else {
+                    // Keep cycling through steps for long-running operations
+                    currentStep = 0;
+                }
+            }, 2500);
+
+            // Poll to detect when an error alert appears
+            pollInterval = setInterval(() => {
+                if (document.querySelectorAll('.alert').length > 0) {
+                    // If there's an alert (error), hide the loading overlay
+                    clearInterval(stepInterval);
+                    clearInterval(pollInterval);
+                    loadingOverlay.classList.remove('active');
+                    // Reset form to allow new upload
+                    fileInput.value = '';
+                    fileName.textContent = 'No file chosen';
+                    fileName.classList.remove('has-file');
+                }
+            }, 500);
+
+            // Detect successful download by monitoring document visibility
+            let downloadCheckCount = 0;
+            const downloadCheckInterval = setInterval(() => {
+                downloadCheckCount++;
+
+                // After 5 seconds, start checking if download completed
+                // When a file downloads, the browser briefly loses focus
+                if (downloadCheckCount > 10) {
+                    // Check if we can detect download by trying to access document
+                    // Most browsers will keep the page visible during download
+                    // We'll hide after reasonable time for PDF generation (20 seconds)
+                    if (downloadCheckCount > 40) {
+                        clearInterval(stepInterval);
+                        clearInterval(pollInterval);
+                        clearInterval(downloadCheckInterval);
+                        loadingOverlay.classList.remove('active');
+                        // Reset form to allow new upload
+                        fileInput.value = '';
+                        fileName.textContent = 'No file chosen';
+                        fileName.classList.remove('has-file');
+                    }
+                }
+            }, 500);
+        });
+
+        // CRITICAL FIX: Hide loading overlay after page load/navigation
+        window.addEventListener('load', function () {
+            loadingOverlay.classList.remove('active');
+            // Reset form on page load
+            fileInput.value = '';
+            fileName.textContent = 'No file chosen';
+            fileName.classList.remove('has-file');
+        });
+
+        window.addEventListener('pageshow', function (event) {
+            // Hide spinner when returning to page (e.g., back button)
+            loadingOverlay.classList.remove('active');
+            // Reset form
+            fileInput.value = '';
+            fileName.textContent = 'No file chosen';
+            fileName.classList.remove('has-file');
+        });
+    </script>
+</body>
+
+</html>

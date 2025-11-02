@@ -1,14 +1,64 @@
-venv
-.venv
-__pycache__
-.DS_Store
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+env/
+*.egg-info/
+.pytest_cache/
 
-# LaTeX auxiliary files (but not PDFs - those are tracked with LFS)
+# Flask
+instance/
+.webassets-cache
+
+# LaTeX auxiliary files
 *.aux
 *.log
 *.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
 
 # Generated images
 latex/images/*.png
 latex/images/*.jpg
+latex/images/*.jpeg
 latex/images/*.webp
+
+# Outputs and uploads (generated content)
+outputs/*/
+uploads/*
+!uploads/.gitkeep
+!outputs/.gitkeep
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Lock files (keep for reproducibility)
+# uv.lock - keep this
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Build
+dist/
+build/

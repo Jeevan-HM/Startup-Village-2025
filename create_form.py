@@ -3,25 +3,21 @@ import glob
 import hashlib
 import json
 import os
-import shutil
 import subprocess
-import urllib
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import Optional
 
 import aiohttp
-from PIL import Image  # Requires 'pip install Pillow'
+from PIL import Image
 
-# --- CONFIGURATION (Updated for 'latex' folder) ---
-JSON_FILE = "inspection.json"  # Assumes this is in the root, with the script
+# --- CONFIGURATION ---
 TEMPLATE_FILE = "latex/report.tex"
-FINAL_TEX_FILE = "latex/final_report.tex"
-FINAL_PDF_FILE = "latex/final_report.pdf"
-IMAGE_DIR = "latex/images"  # <-- Images now INSIDE latex folder
+IMAGE_DIR = "latex/images"
 CONTENT_MARKER = "% --- PYTHON CONTENT MARKER ---"
 
-# Counter for unique field names
-FIELD_COUNTER = {"count": 0}
+# Thread pool for CPU-bound operations
+THREAD_POOL = ThreadPoolExecutor(max_workers=4)
 
 # --- 1. LaTeX Helper Functions ---
 
@@ -728,128 +724,119 @@ def populate_header_data(template_content, data):
     return template_content
 
 
-async def main_async():
-    """Main async function that downloads images while building the report."""
-    print(f"Loading JSON data from {JSON_FILE}...")
-    try:
-        with open(JSON_FILE, "r") as f:
-            data = json.load(f)
-    except Exception as e:
-        print(f"Error loading {JSON_FILE}: {e}")
-        return
+async def generate_pdf_from_json(json_data: dict, output_dir: str = "latex") -> str:
+    """
+    Optimized function to generate PDF from JSON data.
+    Returns the path to the generated PDF file.
+    """
+    global IMAGE_CACHE, IMAGE_DIR
+    IMAGE_CACHE = {}  # Reset cache for each generation
 
-    print(f"Loading LaTeX template from {TEMPLATE_FILE}...")
-    try:
-        with open(TEMPLATE_FILE, "r") as f:
-            template_content = f.read()
-    except Exception as e:
-        print(f"Error loading {TEMPLATE_FILE}: {e}")
-        return
+    # Update IMAGE_DIR to be relative to the output directory
+    IMAGE_DIR = os.path.join(output_dir, "images")
 
-    # Populate header data
-    print("📋 Populating header information...")
-    template_content = populate_header_data(template_content, data)
+    final_tex_file = os.path.join(output_dir, "final_report.tex")
+    final_pdf_file = os.path.join(output_dir, "final_report.pdf")
 
-    print("📥 Collecting image URLs...")
-    image_urls = await collect_all_image_urls(data)
-    print(f"Found {len(image_urls)} unique images")
+    # Load template
+    template_file_path = (
+        TEMPLATE_FILE
+        if os.path.exists(TEMPLATE_FILE)
+        else os.path.join(output_dir, "report.tex")
+    )
+    with open(template_file_path, "r") as f:
+        template_content = f.read()
 
-    print("⏳ Downloading all images...")
-    await download_images_background(image_urls)
+    # Populate header data in parallel with image collection
+    template_content = populate_header_data(template_content, json_data)
+    image_urls = await collect_all_image_urls(json_data)
 
-    print("📝 Generating report body with all images...")
-    report_body = generate_latex_body(data)
+    # Download images concurrently
+    if image_urls:
+        await download_images_background(image_urls)
+
+    # Generate report body (CPU-intensive, run in thread pool)
+    loop = asyncio.get_event_loop()
+    report_body = await loop.run_in_executor(
+        THREAD_POOL, generate_latex_body, json_data
+    )
 
     final_content = template_content.replace(CONTENT_MARKER, report_body)
 
-    print(f"💾 Saving populated LaTeX to {FINAL_TEX_FILE}...")
-    os.makedirs(os.path.dirname(FINAL_TEX_FILE), exist_ok=True)
-    with open(FINAL_TEX_FILE, "w") as f:
+    # Save LaTeX file
+    os.makedirs(output_dir, exist_ok=True)
+    with open(final_tex_file, "w") as f:
         f.write(final_content)
 
-    print("\n📄 Running pdflatex (Pass 1)...")
-    try:
-        run_directory = os.path.dirname(FINAL_TEX_FILE)
-        if run_directory == "":
-            run_directory = "."
+    # Run pdflatex (suppress console output)
+    tex_filename_only = os.path.basename(final_tex_file)
+    result = subprocess.run(
+        ["pdflatex", "-interaction=nonstopmode", tex_filename_only],
+        cwd=output_dir,
+        capture_output=True,
+        text=True,
+    )
 
-        tex_filename_only = os.path.basename(FINAL_TEX_FILE)
+    # Check if PDF was actually generated (more reliable than exit code)
+    if not os.path.exists(final_pdf_file):
+        # Try to extract meaningful error from log file
+        log_file = os.path.join(output_dir, "final_report.log")
+        error_msg = "PDFLaTeX compilation failed - PDF not generated."
 
-        # Run from within the 'latex/' directory
-        result = subprocess.run(
-            ["pdflatex", "-interaction=nonstopmode", tex_filename_only],
-            check=True,
-            cwd=run_directory,
-            capture_output=True,
-            text=True,
-        )
+        if os.path.exists(log_file):
+            try:
+                with open(log_file, "r") as log:
+                    log_content = log.read()
+                    # Look for error indicators
+                    if "!" in log_content:
+                        lines = log_content.split("\n")
+                        for i, line in enumerate(lines):
+                            if line.startswith("!"):
+                                # Get error line and next few lines for context
+                                error_context = "\n".join(lines[i : i + 3])
+                                error_msg = f"LaTeX Error: {error_context}"
+                                break
+            except Exception:
+                pass
 
-        print("\n✅ Done! ✅")
-        print(f"Successfully generated {FINAL_PDF_FILE}")
-        print(
-            f"📝 PDF contains fillable checkboxes that look identical to the original"
-        )
+        msg = f"{error_msg}\nReturn code: {result.returncode}\nStderr: {result.stderr[:200] if result.stderr else 'None'}"
+        raise Exception(msg)
 
-        # Clean up temporary files
-        print("\n🧹 Cleaning up temporary files...")
+    # Cleanup temporary files (including log files)
+    cleanup_temp_files(output_dir, tex_filename_only)
 
-        # Remove downloaded images
-        image_files = glob.glob(os.path.join(IMAGE_DIR, "*"))
+    return final_pdf_file
+
+
+def cleanup_temp_files(output_dir: str, tex_filename: str):
+    """Clean up temporary LaTeX and image files."""
+    # Remove images from the output directory's images folder
+    image_dir = os.path.join(output_dir, "images")
+    if os.path.exists(image_dir):
+        image_files = glob.glob(os.path.join(image_dir, "*"))
         for file_path in image_files:
             try:
                 if os.path.isfile(file_path):
                     os.remove(file_path)
-            except Exception as e:
-                print(f"⚠️  Could not remove {file_path}: {e}")
+            except Exception:
+                pass
 
-        # Remove LaTeX temporary files
-        latex_temp_extensions = [
-            ".aux",
-            ".log",
-            ".out",
-            ".toc",
-            ".fls",
-            ".fdb_latexmk",
-            ".synctex.gz",
-        ]
-        for ext in latex_temp_extensions:
-            temp_file = os.path.join(
-                run_directory, tex_filename_only.replace(".tex", ext)
-            )
-            if os.path.exists(temp_file):
-                try:
-                    os.remove(temp_file)
-                except Exception as e:
-                    print(f"⚠️  Could not remove {temp_file}: {e}")
-
-        print("✓ Cleanup complete!")
-
-    except subprocess.CalledProcessError as e:
-        print(f"\n❌ PDFLATEX FAILED ❌")
-        print(
-            f"A LaTeX error occurred. Python script is OK, but the .tex file is invalid."
-        )
-        print(
-            f"To find the error, open the file 'latex/final_report.log' and scroll to the bottom."
-        )
-        print(f"Look for a line starting with '!'")
-        print(f"\nLast output from pdflatex:")
-        if e.stderr:
-            print(e.stderr[-500:])
-        if e.stdout:
-            print(e.stdout[-500:])
-
-    except FileNotFoundError:
-        print("\n❌ PDFLATEX NOT FOUND ❌")
-        print(
-            "Error: 'pdflatex' command not found. Is TeX Live (or MiKTeX) installed and in your system's PATH?"
-        )
-
-
-def main():
-    """Entry point - runs the async main function."""
-    asyncio.run(main_async())
-
-
-if __name__ == "__main__":
-    main()
+    # Remove LaTeX temporary files including .tex and .log
+    base_name = tex_filename.replace(".tex", "")
+    latex_temp_files = [
+        f"{base_name}.tex",
+        f"{base_name}.aux",
+        f"{base_name}.log",
+        f"{base_name}.out",
+        f"{base_name}.toc",
+        f"{base_name}.fls",
+        f"{base_name}.fdb_latexmk",
+        f"{base_name}.synctex.gz",
+    ]
+    for filename in latex_temp_files:
+        temp_file = os.path.join(output_dir, filename)
+        if os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except Exception:
+                pass
