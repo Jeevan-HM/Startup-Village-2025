@@ -29,7 +29,7 @@ COPY static/ static/
 COPY latex/ latex/
 
 # Create necessary directories
-RUN mkdir -p uploads outputs
+RUN mkdir -p /tmp/uploads /tmp/outputs
 
 # Set environment variables
 ENV FLASK_APP=app.py

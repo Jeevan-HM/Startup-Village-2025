@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: inspection-report-generator
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    healthCheckPath: /health

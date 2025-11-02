@@ -306,21 +306,56 @@ lsof -ti:8080 | xargs kill -9
 
 ## 🚀 Deployment
 
-### Docker Deployment
+> **⚠️ Important**: This application requires LaTeX (`pdflatex`) to generate PDFs. Vercel and other serverless platforms do NOT support LaTeX. Use Docker-based hosting instead.
+
+### ✅ Recommended: Render.com (Free Tier Available)
+
+1. **Push your code to GitHub**
+2. **Connect to Render.com**:
+   - Go to [Render.com](https://render.com)
+   - Click "New +" → "Web Service"
+   - Connect your GitHub repository
+   - Render will auto-detect the `render.yaml` configuration
+
+3. **Deploy automatically**: Render will build and deploy using Docker
+
+**Render.yaml is already configured!** ✅
+
+### 🐳 Alternative: Railway.app
+
+1. **Push code to GitHub**
+2. **Deploy on Railway**:
+   - Go to [Railway.app](https://railway.app)
+   - Click "New Project" → "Deploy from GitHub repo"
+   - Select your repository
+   - Railway will auto-detect and use the Dockerfile
+
+### 🖥️ Self-Hosted with Docker
 
 ```bash
 # Build production image
 docker build -t property-inspector:latest .
 
-# Run with volume mounting for persistence
+# Run with Docker
 docker run -d \
   -p 8080:8080 \
-  -v $(pwd)/outputs:/app/outputs \
   --name property-inspector \
   property-inspector:latest
+
+# Or use Docker Compose
+docker-compose up -d
 ```
 
-### Traditional Deployment
+### 🚫 Why Not Vercel?
+
+Vercel's serverless functions have a **read-only file system** (except `/tmp`) and **do not include LaTeX**. While we've updated the code to use `/tmp` directories, LaTeX compilation will fail on Vercel.
+
+**If you must use Vercel**, consider:
+- Using an external LaTeX API (Overleaf API, LaTeX.Online)
+- Pre-generating PDFs elsewhere
+- Using a different PDF generation library (WeasyPrint, ReportLab)
+
+### Traditional Deployment (VPS/Cloud)
 
 Use a production WSGI server:
 

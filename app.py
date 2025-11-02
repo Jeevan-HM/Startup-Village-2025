@@ -13,12 +13,13 @@ from create_form import generate_pdf_from_json
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB max file size
-app.config["UPLOAD_FOLDER"] = "uploads"
-app.config["OUTPUT_FOLDER"] = "outputs"
+# Use /tmp for serverless environments like Vercel
+app.config["UPLOAD_FOLDER"] = "/tmp/uploads"
+app.config["OUTPUT_FOLDER"] = "/tmp/outputs"
 
 # Ensure directories exist
-Path(app.config["UPLOAD_FOLDER"]).mkdir(exist_ok=True)
-Path(app.config["OUTPUT_FOLDER"]).mkdir(exist_ok=True)
+Path(app.config["UPLOAD_FOLDER"]).mkdir(exist_ok=True, parents=True)
+Path(app.config["OUTPUT_FOLDER"]).mkdir(exist_ok=True, parents=True)
 
 
 def allowed_file(filename):
