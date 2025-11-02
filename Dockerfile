@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY app.py .
 COPY create_form.py .
+COPY gemini_ai.py .
 
 # Copy templates and static files
 COPY templates/ templates/
