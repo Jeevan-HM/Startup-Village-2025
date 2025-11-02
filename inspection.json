@@ -264,7 +264,18 @@
                                 "commentNumber": "1.3"
                             }
                         ],
-                        "media": []
+                        "media": [
+                            {
+                                "url": "obstruction.png",
+                                "type": "image",
+                                "caption": "Obstructed area example"
+                            },
+                            {
+                                "url": "scope.png",
+                                "type": "image",
+                                "caption": "Scope and Limitations of the Inspection"
+                            }
+                        ]
                     }
                 ],
                 "sectionNumber": "1"
@@ -291,7 +302,13 @@
                         "linkedToType": null,
                         "linkedToName": null,
                         "comments": [],
-                        "media": []
+                        "media": [
+                            {
+                                "url": "Screenshot 2025-11-02 at 3.18.45 AM.jpg",
+                                "type": "image",
+                                "caption": "Inaccessible / obstructed components or areas"
+                            }
+                        ]
                     }
                 ],
                 "sectionNumber": "2"

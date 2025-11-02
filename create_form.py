@@ -16,9 +16,12 @@ from PIL import Image  # Requires 'pip install Pillow'
 JSON_FILE = "inspection.json"  # Assumes this is in the root, with the script
 TEMPLATE_FILE = "latex/report.tex"
 FINAL_TEX_FILE = "latex/final_report.tex"
-FINAL_PDF_FILE = "final_report.pdf"
+FINAL_PDF_FILE = "latex/final_report.pdf"
 IMAGE_DIR = "latex/images"  # <-- Images now INSIDE latex folder
 CONTENT_MARKER = "% --- PYTHON CONTENT MARKER ---"
+
+# Counter for unique field names
+FIELD_COUNTER = {"count": 0}
 
 # --- 1. LaTeX Helper Functions ---
 
@@ -185,14 +188,317 @@ def get_cached_image(url: str) -> Optional[str]:
 # --- 2. Main Content Generation ---
 
 
+def generate_trec_form_page(data):
+    """
+    Generates the TREC form page (standard first page with table).
+    """
+    inspection = data.get("inspection", {})
+    client_info = inspection.get("clientInfo", {})
+    address = inspection.get("address", {})
+    inspector = inspection.get("inspector", {})
+    schedule = inspection.get("schedule", {})
+
+    # Format the inspection date
+    inspection_date = format_timestamp(schedule.get("date"))
+
+    # Get client name (buyer/seller)
+    client_name = escape_latex(client_info.get("name", ""))
+
+    # Get property address
+    full_address = escape_latex(address.get("fullAddress", ""))
+
+    # Get inspector information
+    inspector_name = escape_latex(inspector.get("name", ""))
+
+    trec_page = []
+
+    # No header/footer on this page
+    trec_page.append(r"\thispagestyle{empty}")
+    trec_page.append(r"")
+
+    # TREC form table
+    trec_page.append(r"\noindent")
+    trec_page.append(r"\begin{tabular}{|p{0.45\textwidth}|p{0.45\textwidth}|}")
+    trec_page.append(r"\hline")
+    trec_page.append(r"\textbf{Buyer Name} & \textbf{Date of Inspection} \\")
+    trec_page.append(client_name + r" & " + inspection_date + r" \\")
+    trec_page.append(r"\hline")
+    trec_page.append(
+        r"\multicolumn{2}{|p{0.93\textwidth}|}{\textbf{Address of Inspected Property}} \\"
+    )
+    trec_page.append(r"\multicolumn{2}{|p{0.93\textwidth}|}{" + full_address + r"} \\")
+    trec_page.append(r"\hline")
+    trec_page.append(r"\textbf{Name of Inspector} & \textbf{TREC License \#} \\")
+    trec_page.append(inspector_name + r" &  \\")
+    trec_page.append(r"\hline")
+    trec_page.append(
+        r"\textbf{Name of Sponsor (if applicable)} & \textbf{TREC License \#} \\"
+    )
+    trec_page.append(r" &  \\")
+    trec_page.append(r"\hline")
+    trec_page.append(r"\end{tabular}")
+    trec_page.append(r"")
+    trec_page.append(r"\vspace{1em}")
+    trec_page.append(r"")
+    trec_page.append(r"\begin{center}")
+    trec_page.append(r"\textbf{\Large PROPERTY INSPECTION REPORT FORM}")
+    trec_page.append(r"\end{center}")
+    trec_page.append(r"")
+    trec_page.append(r"\vspace{1em}")
+    trec_page.append(r"")
+
+    # PURPOSE OF INSPECTION section
+    trec_page.append(r"\subsection*{PURPOSE OF INSPECTION}")
+    trec_page.append(
+        r"A real estate inspection is a visual survey of a structure and a basic performance evaluation of the systems and components of a building. It provides information regarding the general condition of a residence at the time the inspection was conducted."
+    )
+    trec_page.append(r"")
+    trec_page.append(
+        r"It is important that you carefully read ALL of this information. Ask the inspector to clarify any items or comments that are unclear."
+    )
+    trec_page.append(r"")
+
+    # RESPONSIBILITY sections
+    trec_page.append(r"\subsection*{RESPONSIBILITY OF THE INSPECTOR}")
+    trec_page.append(
+        r"This inspection is governed by the Texas Real Estate Commission (TREC) Standards of Practice (SOPs), which dictates the minimum requirements for a real estate inspection."
+    )
+    trec_page.append(r"")
+    trec_page.append(r"\noindent\textbf{The inspector IS required to:}")
+    trec_page.append(r"\begin{itemize}")
+    trec_page.append(r"\setlength{\itemsep}{0pt}")
+    trec_page.append(r"\setlength{\parskip}{0pt}")
+    trec_page.append(
+        r"\item use this Property Inspection Report form for the inspection;"
+    )
+    trec_page.append(
+        r"\item inspect only those components and conditions that are present, visible, and accessible at the time of the inspection;"
+    )
+    trec_page.append(
+        r"\item indicate whether each item was inspected, not inspected, or not present;"
+    )
+    trec_page.append(
+        r"\item indicate an item as Deficient (D) if a condition exists that adversely and materially affects the performance of a system or component OR constitutes a hazard to life, limb or property as specified by the SOPs; and"
+    )
+    trec_page.append(
+        r"\item explain the inspector's findings in the corresponding section in the body of the report form."
+    )
+    trec_page.append(r"\end{itemize}")
+    trec_page.append(r"")
+    trec_page.append(r"\noindent\textbf{The inspector IS NOT required to:}")
+    trec_page.append(r"\begin{itemize}")
+    trec_page.append(r"\setlength{\itemsep}{0pt}")
+    trec_page.append(r"\setlength{\parskip}{0pt}")
+    trec_page.append(r"\item identify all potential hazards;")
+    trec_page.append(
+        r"\item turn on decommissioned equipment, systems, utilities, or apply an open flame or light a pilot to operate any appliance;"
+    )
+    trec_page.append(r"\item climb over obstacles, move furnishings or stored items;")
+    trec_page.append(
+        r"\item prioritize or emphasize the importance of one deficiency over another;"
+    )
+    trec_page.append(
+        r"\item provide follow-up services to verify that proper repairs have been made; or"
+    )
+    trec_page.append(
+        r"\item inspect system or component listed under the optional section of the SOPs (22 TAC 535.233)."
+    )
+    trec_page.append(r"\end{itemize}")
+    trec_page.append(r"")
+
+    trec_page.append(r"\subsection*{RESPONSIBILITY OF THE CLIENT}")
+    trec_page.append(
+        r"While items identified as Deficient (D) in an inspection report DO NOT obligate any party to make repairs or take other actions, in the event that any further evaluations are needed, it is the responsibility of the client to obtain further evaluations and/or cost estimates from qualified service professionals regarding any items reported as Deficient (D). It is recommended that any further evaluations and/or cost estimates take place prior to the expiration of any contractual time limitations, such as option periods."
+    )
+    trec_page.append(r"")
+    trec_page.append(
+        r"\noindent\textbf{Please Note:} Evaluations performed by service professionals in response to items reported as Deficient (D) on the report may lead to the discovery of additional deficiencies that were not present, visible, or accessible at the time of the inspection. Any repairs made after the date of the inspection may render information contained in this report obsolete or invalid."
+    )
+    trec_page.append(r"")
+    trec_page.append(r"\clearpage")
+    trec_page.append(r"")
+
+    return "\n".join(trec_page)
+
+
+def generate_title_page(data):
+    """
+    Generates a professional title page with property information and images.
+    """
+    inspection = data.get("inspection", {})
+    client_info = inspection.get("clientInfo", {})
+    address = inspection.get("address", {})
+    inspector = inspection.get("inspector", {})
+    schedule = inspection.get("schedule", {})
+    booking_data = inspection.get("bookingFormData", {})
+    property_info = booking_data.get("propertyInfo", {})
+
+    # Format the inspection date
+    inspection_date = format_timestamp(schedule.get("date"))
+
+    # Get client name (buyer/seller)
+    client_name = escape_latex(client_info.get("name", ""))
+
+    # Get property address
+    full_address = escape_latex(address.get("fullAddress", ""))
+
+    # Get inspector information
+    inspector_name = escape_latex(inspector.get("name", ""))
+    inspector_email = escape_latex(inspector.get("email", ""))
+
+    # Get agent information if available
+    agents = inspection.get("agents", [])
+    agent_name = ""
+    agent_company = ""
+    if agents:
+        primary_agent = agents[0].get("agent", {})
+        agent_name = escape_latex(primary_agent.get("name", ""))
+        agent_company = escape_latex(primary_agent.get("company", {}).get("name", ""))
+
+    # Building details
+    square_footage = property_info.get("squareFootage", 0)
+
+    title = []
+
+    # No header/footer on title page
+    title.append(r"\thispagestyle{empty}")
+    title.append(r"")
+
+    # Title page content
+    title.append(r"\begin{center}")
+    title.append(r"\vspace*{2cm}")
+    title.append(r"\textbf{\Huge PROPERTY INSPECTION REPORT}")
+    title.append(r"\vspace{1cm}")
+    title.append(r"")
+    title.append(r"\hrule")
+    title.append(r"\vspace{0.5cm}")
+    title.append(r"")
+    title.append(r"\textbf{\Large Prepared For:}")
+    title.append(r"")
+    title.append(r"\textbf{\large " + client_name + "}")
+    title.append(r"\vspace{0.5cm}")
+    title.append(r"")
+    title.append(r"\textbf{\Large Concerning:}")
+    title.append(r"")
+    title.append(r"\textbf{\large " + full_address + "}")
+    title.append(r"\vspace{0.5cm}")
+    title.append(r"")
+    title.append(r"\hrule")
+    title.append(r"\vspace{1cm}")
+    title.append(r"")
+    title.append(r"\textbf{\Large By:}")
+    title.append(r"")
+    title.append(r"\textbf{\large " + inspector_name + "}")
+
+    if inspector_email:
+        title.append(r"\vspace{0.3cm}")
+        title.append(r"")
+        title.append(r"\textbf{Email:} " + inspector_email)
+
+    title.append(r"\vspace{1cm}")
+    title.append(r"")
+    title.append(r"\textbf{\Large Date of Inspection:}")
+    title.append(r"")
+    title.append(r"\textbf{\large " + inspection_date + "}")
+
+    if agent_name:
+        title.append(r"\vspace{1cm}")
+        title.append(r"")
+        title.append(r"\textbf{Real Estate Agent:} " + agent_name)
+        if agent_company:
+            title.append(r"")
+            title.append(r"\textbf{Company:} " + agent_company)
+
+    if square_footage > 0:
+        title.append(r"\vspace{0.5cm}")
+        title.append(r"")
+        title.append(
+            r"\textbf{Approximate Square Footage:} " + f"{square_footage:,} sq ft"
+        )
+
+    title.append(r"\vspace{1.5cm}")
+    title.append(r"")
+
+    # Add the images side by side
+    title.append(r"\begin{minipage}{0.48\textwidth}")
+    title.append(r"\centering")
+    title.append(
+        r"\includegraphics[width=\textwidth, height=2.5in, keepaspectratio]{obstruction.png}"
+    )
+    title.append(r"\textit{\small Obstructed area example}")
+    title.append(r"\end{minipage}")
+    title.append(r"\hfill")
+    title.append(r"\begin{minipage}{0.48\textwidth}")
+    title.append(r"\centering")
+    title.append(
+        r"\includegraphics[width=\textwidth, height=2.5in, keepaspectratio]{scope.png}"
+    )
+    title.append(r"\textit{\small \\ Scope and Limitations}")
+    title.append(r"\end{minipage}")
+
+    title.append(r"\end{center}")
+    title.append(r"\clearpage")
+    title.append(r"")
+
+    return "\n".join(title)
+
+
 def generate_latex_body(data):
     """
     Loops through the JSON data and builds the LaTeX string for the report body.
     """
     body = []
+
+    # Add the title page first (page 1)
+    body.append(generate_title_page(data))
+
+    # Add the TREC form page (page 2)
+    body.append(generate_trec_form_page(data))
+
     sections = data.get("inspection", {}).get("sections", [])
 
-    comment_col = r"p{0.7\textwidth}"
+    comment_col = r"p{0.65\textwidth}"
+
+    # Add header/footer setup before the inspection sections start
+    # This ensures it starts from section 1 (which is page 3 after title and TREC pages)
+    header_setup = []
+    header_setup.append(
+        r"% Start the fancy header/footer from section 1 onwards (page 3)"
+    )
+    header_setup.append(r"\pagestyle{fancy}")
+    header_setup.append(r"\fancyhf{}")
+    header_setup.append(r"")
+    header_setup.append(r"\fancyhead[L]{%")
+    header_setup.append(
+        r"    Report Identification: \TextField[name=reportid, width=3in, height=12pt, bordercolor={}, backgroundcolor={}, borderstyle=U, borderwidth=1]{} \\"
+    )
+    header_setup.append(
+        r"    \textbf{I=Inspected \quad NI=Not Inspected \quad NP=Not Present \quad D=Deficient}"
+    )
+    header_setup.append(r"}")
+    header_setup.append(r"\renewcommand{\headrulewidth}{0pt}")
+    header_setup.append(r"")
+    header_setup.append(r"\fancyfoot[L]{REI 7-6 (\mmddyyyydate\today)}")
+    header_setup.append(r"\fancyfoot[C]{}")
+    header_setup.append(r"\fancyfoot[R]{%")
+    header_setup.append(
+        r"    Promulgated by the Texas Real Estate Commission \textbullet{}"
+    )
+    header_setup.append(r"    \href{tel:512-936-3000}{(512) 936-3000} \textbullet{}")
+    header_setup.append(r"    \href{https://www.trec.texas.gov}{www.trec.texas.gov}")
+    header_setup.append(r"}")
+    header_setup.append(r"\renewcommand{\footrule}{%")
+    header_setup.append(r"    \vspace{5pt}")
+    header_setup.append(r"    \begin{center}")
+    header_setup.append(r"        Page \thepage\ of \pageref{LastPage}")
+    header_setup.append(r"    \end{center}")
+    header_setup.append(r"    \vspace{2pt}")
+    header_setup.append(r"    \hrulefill")
+    header_setup.append(r"    \vspace{2pt}")
+    header_setup.append(r"}")
+    header_setup.append(r"")
+
+    body.append("\n".join(header_setup))
 
     for i, section in enumerate(sections, start=1):
         section_name = escape_latex(section.get("name", "").upper())
@@ -215,7 +521,7 @@ def generate_latex_body(data):
 
             # Scenario 1: No comment AND inspection status is not null → Table with "No comment"
             if not comments and status is not None:
-                body.append(r"\begin{longtable}{c c c c p{0.7\textwidth}}")
+                body.append(r"\begin{longtable}{c c c c p{0.65\textwidth}}")
                 body.append(
                     r"\textbf{I} & \textbf{NI} & \textbf{NP} & \textbf{D} & \textbf{Comments} \\ \hline \endhead"
                 )
@@ -255,8 +561,6 @@ def generate_latex_body(data):
                                 img_path = get_cached_image(url)
                                 if img_path:
                                     img_filename = os.path.basename(img_path)
-                                    # FIX: Since pdflatex runs from latex/ directory,
-                                    # and images are in latex/images/, we just need "images/filename"
                                     relative_img_path = os.path.join(
                                         "images", img_filename
                                     ).replace("\\", "/")
@@ -267,50 +571,57 @@ def generate_latex_body(data):
                                     )
 
                         if valid_image_paths:
-                            image_latex_parts = []
                             num_photos = len(valid_image_paths)
 
+                            # Calculate image width to fit within comment column
                             if num_photos == 1:
-                                img_width = "2.5in"
+                                img_width = "3.0in"
+                                max_height = "2.5in"
                             elif num_photos == 2:
-                                img_width = "2.0in"
+                                img_width = "1.8in"
+                                max_height = "2.0in"
                             elif num_photos == 3:
-                                img_width = "1.5in"
+                                img_width = "1.3in"
+                                max_height = "1.8in"
                             else:  # 4 or more
-                                img_width = "1.1in"
+                                img_width = "1.0in"
+                                max_height = "1.5in"
 
-                            max_img_height = "2.5in"
-
+                            # Build images in a row
+                            image_parts = []
                             for path in valid_image_paths:
-                                image_latex_parts.append(
+                                image_parts.append(
                                     r"\includegraphics[width="
                                     + img_width
                                     + ", height="
-                                    + max_img_height
+                                    + max_height
                                     + r", keepaspectratio]{"
                                     + path
                                     + "}"
                                 )
 
-                            all_images_latex = r" \hspace{0.5em} ".join(
-                                image_latex_parts
-                            )
+                            # Join images with spacing
+                            all_images = r" \hspace{0.2cm} ".join(image_parts)
 
+                            # Add images to the comment column
                             body.append(
-                                r"& & & & "
-                                + r"{\centering "
-                                + all_images_latex
-                                + r" \par} \\[0.5em]"
+                                r"& & & & \parbox{\linewidth}{\centering "
+                                + all_images
+                                + r"} \\[0.3em]"
                             )
 
+                    # If the comment has a 'value', display it in a new row
                     comment_value = comment.get("value")
                     if comment_value:
                         value_latex = escape_latex(str(comment_value))
-                        body.append(r"& & & & " + value_latex + r" \\")
+                        # Span the comment column only
+                        body.append(
+                            r"\multicolumn{4}{c}{} & " + value_latex + r" \\[0.5em]"
+                        )
 
                 body.append(r"\end{longtable}" + "\n")
 
-            body.append(r"\vspace{1.5em}")
+            body.append(r"\vspace{1em}")
 
         body.append(r"\clearpage")
 
@@ -357,6 +668,66 @@ async def download_images_background(urls: list[str]):
     print(f"✅ Downloaded {successful}/{len(urls)} images successfully\n")
 
 
+def format_timestamp(timestamp_ms):
+    """Converts millisecond timestamp to formatted date string."""
+    if not timestamp_ms:
+        return ""
+    from datetime import datetime
+
+    dt = datetime.fromtimestamp(timestamp_ms / 1000)
+    return dt.strftime("%m/%d/%Y %I:%M%p")
+
+
+def populate_header_data(template_content, data):
+    """Populates the header information in the template."""
+    inspection = data.get("inspection", {})
+
+    # Extract data
+    client_name = escape_latex(inspection.get("clientInfo", {}).get("name", ""))
+    inspection_date = format_timestamp(inspection.get("schedule", {}).get("date"))
+    property_address = escape_latex(
+        inspection.get("address", {}).get("fullAddress", "")
+    )
+    inspector_name = escape_latex(inspection.get("inspector", {}).get("name", ""))
+    trec_license = ""  # Not in JSON
+    sponsor_name = ""  # Not in JSON
+    sponsor_license = ""  # Not in JSON
+
+    # Additional info
+    occupancy = "Occupied"  # Default, could be added to JSON
+    attendance = "Buyer"  # Could extract from clientInfo.userType
+    temperature = "70 to 80"  # Not in JSON
+    building_type = "Single Family"  # Not in JSON
+    weather = "Clear"  # Not in JSON
+    orientation = "North"  # Not in JSON
+    inaccessible = ""  # Not in JSON
+    additional_info = ""  # Can add custom text here
+
+    # Replace placeholders
+    replacements = {
+        "% PYTHON_BUYER_NAME %": client_name,
+        "% PYTHON_INSPECTION_DATE %": inspection_date,
+        "% PYTHON_PROPERTY_ADDRESS %": property_address,
+        "% PYTHON_INSPECTOR_NAME %": inspector_name,
+        "% PYTHON_TREC_LICENSE %": trec_license,
+        "% PYTHON_SPONSOR_NAME %": sponsor_name,
+        "% PYTHON_SPONSOR_LICENSE %": sponsor_license,
+        "% PYTHON_OCCUPANCY %": occupancy,
+        "% PYTHON_ATTENDANCE %": attendance,
+        "% PYTHON_TEMPERATURE %": temperature,
+        "% PYTHON_BUILDING_TYPE %": building_type,
+        "% PYTHON_WEATHER %": weather,
+        "% PYTHON_ORIENTATION %": orientation,
+        "% PYTHON_INACCESSIBLE %": inaccessible,
+        "% PYTHON_ADDITIONAL_INFO %": additional_info,
+    }
+
+    for placeholder, value in replacements.items():
+        template_content = template_content.replace(placeholder, value)
+
+    return template_content
+
+
 async def main_async():
     """Main async function that downloads images while building the report."""
     print(f"Loading JSON data from {JSON_FILE}...")
@@ -374,6 +745,10 @@ async def main_async():
     except Exception as e:
         print(f"Error loading {TEMPLATE_FILE}: {e}")
         return
+
+    # Populate header data
+    print("📋 Populating header information...")
+    template_content = populate_header_data(template_content, data)
 
     print("📥 Collecting image URLs...")
     image_urls = await collect_all_image_urls(data)
@@ -409,27 +784,45 @@ async def main_async():
             text=True,
         )
 
-        # print("📄 Running pdflatex (Pass 2)...")
-        # result = subprocess.run(
-        #     ["pdflatex", "-interaction=nonstopmode", tex_filename_only],
-        #     check=True,
-        #     cwd=run_directory,
-        #     capture_output=True,
-        #     text=True,
-        # )
+        print("\n✅ Done! ✅")
+        print(f"Successfully generated {FINAL_PDF_FILE}")
+        print(
+            f"📝 PDF contains fillable checkboxes that look identical to the original"
+        )
 
+        # Clean up temporary files
+        print("\n🧹 Cleaning up temporary files...")
+
+        # Remove downloaded images
         image_files = glob.glob(os.path.join(IMAGE_DIR, "*"))
         for file_path in image_files:
             try:
                 if os.path.isfile(file_path):
                     os.remove(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
             except Exception as e:
                 print(f"⚠️  Could not remove {file_path}: {e}")
 
-        print("\n✅ Done! ✅")
-        print(f"Successfully generated {FINAL_PDF_FILE}")
+        # Remove LaTeX temporary files
+        latex_temp_extensions = [
+            ".aux",
+            ".log",
+            ".out",
+            ".toc",
+            ".fls",
+            ".fdb_latexmk",
+            ".synctex.gz",
+        ]
+        for ext in latex_temp_extensions:
+            temp_file = os.path.join(
+                run_directory, tex_filename_only.replace(".tex", ext)
+            )
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception as e:
+                    print(f"⚠️  Could not remove {temp_file}: {e}")
+
+        print("✓ Cleanup complete!")
 
     except subprocess.CalledProcessError as e:
         print(f"\n❌ PDFLATEX FAILED ❌")
@@ -442,7 +835,7 @@ async def main_async():
         print(f"Look for a line starting with '!'")
         print(f"\nLast output from pdflatex:")
         if e.stderr:
-            print(e.stderr[-500:])  # Last 500 chars
+            print(e.stderr[-500:])
         if e.stdout:
             print(e.stdout[-500:])
 

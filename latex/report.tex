@@ -3,55 +3,176 @@
 \usepackage[T1]{fontenc}
 \usepackage[margin=0.75in, includefoot]{geometry} 
 \usepackage{fancyhdr}
-\usepackage{lastpage}      % For the "of Y" page count
+\usepackage{lastpage}
 \usepackage{datetime}
-\usepackage[hidelinks]{hyperref}
 \usepackage{graphicx} 
 \usepackage{array}    
-\usepackage{textcomp}      % For the \textbullet command
-\usepackage{amssymb}       % For the \square and \boxtimes checkbox symbols
-\usepackage{longtable}     % For tables that span multiple pages
-\pdfpkresolution=100    % dpi       % see pdftex manual
+\usepackage{textcomp}
+\usepackage{amssymb}
+\usepackage{longtable}
+\usepackage{ragged2e}  % Better text justification
+\usepackage{microtype} % Better typography and word spacing
 
-% Set the header height
+% hyperref with form support
+\usepackage[pdftex, hidelinks]{hyperref}
+
+% Allow hyphenation and better word breaking
+\tolerance=1
+\emergencystretch=\maxdimen
+\hyphenpenalty=10000
+\exhyphenpenalty=100
+\sloppy
+
+\pdfpkresolution=100
+
 \setlength{\headheight}{23pt} 
-% --- FIX #2: Add space for the tall footer ---
-\setlength{\footskip}{60pt} 
+\setlength{\footskip}{60pt}
 
+% Define custom date format helper
+\newdateformat{inspectiondate}{\THEDAY/\THEMONTH/\THEYEAR}
 
-% --- DOCUMENT STARTS HERE ---
 \begin{document}
 
-% All fancyhdr setup goes INSIDE \begin{document}
-\pagestyle{fancy}
-\fancyhf{} % Clear all default header/footer fields
+% --- PYTHON CONTENT MARKER ---
+% Python will insert title page first, then TREC form page, then inspection sections
+% --- PYTHON CONTENT MARKER ---
 
-% --- HEADER ---
-\fancyhead[L]{%
-    Report Identification: \\
-    \textbf{I=Inspected \quad NI=Not Inspected \quad NP=Not Present \quad D=Deficient}
-}
-\renewcommand{\headrulewidth}{0pt} % No line under the header
+\end{document}
+\noindent
+\begin{tabular}{|p{0.45\textwidth}|p{0.45\textwidth}|}
+\hline
+\textbf{Buyer Name} & \textbf{Date of Inspection} \\
+% PYTHON_BUYER_NAME % & % PYTHON_INSPECTION_DATE % \\
+\hline
+\multicolumn{2}{|p{0.93\textwidth}|}{\textbf{Address of Inspected Property}} \\
+\multicolumn{2}{|p{0.93\textwidth}|}{% PYTHON_PROPERTY_ADDRESS %} \\
+\hline
+\textbf{Name of Inspector} & \textbf{TREC License \#} \\
+% PYTHON_INSPECTOR_NAME % & % PYTHON_TREC_LICENSE % \\
+\hline
+\textbf{Name of Sponsor (if applicable)} & \textbf{TREC License \#} \\
+% PYTHON_SPONSOR_NAME % & % PYTHON_SPONSOR_LICENSE % \\
+\hline
+\end{tabular}
 
-% --- FOOTER ---
-\fancyfoot[L]{REI 7-6 (\mmddyyyydate\today)}
-\fancyfoot[C]{} % Keep center empty
-\fancyfoot[R]{%
-    Promulgated by the Texas Real Estate Commission \textbullet{} 
-    \href{tel:512-936-3000}{(512) 936-3000} \textbullet{} 
-    \href{https://www.trec.texas.gov}{www.trec.texas.gov}
-}
-\renewcommand{\footrule}{%
-    \vspace{5pt} 
-    \begin{center}
-        Page \thepage\ of \pageref{LastPage}
-    \end{center}
-    \vspace{2pt} 
-    \hrulefill 
-    \vspace{2pt} 
-}
-% --- END HEADER/FOOTER SETUP ---
+\vspace{1em}
 
+\begin{center}
+\textbf{\Large PROPERTY INSPECTION REPORT FORM}
+\end{center}
+
+\vspace{1em}
+
+\subsection*{PURPOSE OF INSPECTION}
+A real estate inspection is a visual survey of a structure and a basic performance evaluation of the systems and components of a building. It provides information regarding the general condition of a residence at the time the inspection was conducted.
+
+It is important that you carefully read ALL of this information. Ask the inspector to clarify any items or comments that are unclear.
+
+\subsection*{RESPONSIBILITY OF THE INSPECTOR}
+This inspection is governed by the Texas Real Estate Commission (TREC) Standards of Practice (SOPs), which dictates the minimum requirements for a real estate inspection.
+
+\noindent\textbf{The inspector IS required to:}
+\begin{itemize}
+\setlength{\itemsep}{0pt}
+\setlength{\parskip}{0pt}
+\item use this Property Inspection Report form for the inspection;
+\item inspect only those components and conditions that are present, visible, and accessible at the time of the inspection;
+\item indicate whether each item was inspected, not inspected, or not present;
+\item indicate an item as Deficient (D) if a condition exists that adversely and materially affects the performance of a system or component OR constitutes a hazard to life, limb or property as specified by the SOPs; and
+\item explain the inspector's findings in the corresponding section in the body of the report form.
+\end{itemize}
+
+\noindent\textbf{The inspector IS NOT required to:}
+\begin{itemize}
+\setlength{\itemsep}{0pt}
+\setlength{\parskip}{0pt}
+\item identify all potential hazards;
+\item turn on decommissioned equipment, systems, utilities, or apply an open flame or light a pilot to operate any appliance;
+\item climb over obstacles, move furnishings or stored items;
+\item prioritize or emphasize the importance of one deficiency over another;
+\item provide follow-up services to verify that proper repairs have been made; or
+\item inspect system or component listed under the optional section of the SOPs (22 TAC 535.233).
+\end{itemize}
+
+\subsection*{RESPONSIBILITY OF THE CLIENT}
+While items identified as Deficient (D) in an inspection report DO NOT obligate any party to make repairs or take other actions, in the event that any further evaluations are needed, it is the responsibility of the client to obtain further evaluations and/or cost estimates from qualified service professionals regarding any items reported as Deficient (D). It is recommended that any further evaluations and/or cost estimates take place prior to the expiration of any contractual time limitations, such as option periods.
+
+\noindent\textbf{Please Note:} Evaluations performed by service professionals in response to items reported as Deficient (D) on the report may lead to the discovery of additional deficiencies that were not present, visible, or accessible at the time of the inspection. Any repairs made after the date of the inspection may render information contained in this report obsolete or invalid.
+
+\clearpage
+
+% Page 2 still has no header/footer
+\thispagestyle{empty}
+
+\subsection*{REPORT LIMITATIONS}
+This report is provided for the benefit of the named client and is based on observations made by the named inspector on the date the inspection was performed (indicated above).
+
+ONLY those items specifically noted as being inspected on the report were inspected.
+
+\noindent\textbf{This inspection IS NOT:}
+\begin{itemize}
+\setlength{\itemsep}{0pt}
+\setlength{\parskip}{0pt}
+\item a technically exhaustive inspection of the structure, its systems, or its components and may not reveal all deficiencies;
+\item an inspection to verify compliance with any building codes;
+\item an inspection to verify compliance with manufacturer's installation instructions for any system or component and DOES NOT imply insurability or warrantability of the structure or its components.
+\end{itemize}
+
+\clearpage
+
+\subsection*{NOTICE CONCERNING HAZARDOUS CONDITIONS, DEFICIENCIES, AND CONTRACTUAL AGREEMENTS}
+
+Conditions may be present in your home that did not violate building codes or common practices in effect when the home was constructed but are considered hazardous by today's standards. Such conditions that were part of the home prior to the adoption of any current codes prohibiting them may not be required to be updated to meet current code requirements. However, if it can be reasonably determined that they are present at the time of the inspection, the potential for injury or property loss from these conditions is significant enough to require inspectors to report them as Deficient (D). Examples of such hazardous conditions include:
+
+\begin{itemize}
+\setlength{\itemsep}{0pt}
+\setlength{\parskip}{0pt}
+\item malfunctioning, improperly installed, or missing ground fault circuit protection (GFCI) devices and arc-fault (AFCI) devices;
+\item ordinary glass in locations where modern construction techniques call for safety glass;
+\item malfunctioning or lack of fire safety features such as smoke alarms, fire-rated doors in certain locations, and functional emergency escape and rescue openings in bedrooms;
+\item malfunctioning carbon monoxide alarms;
+\item excessive spacing between balusters on stairways and porches;
+\item improperly installed appliances;
+\item improperly installed or defective safety devices;
+\item lack of electrical bonding and grounding; and
+\item lack of bonding on gas piping, including corrugated stainless steel tubing (CSST).
+\end{itemize}
+
+\noindent\textbf{Please Note:} items identified as Deficient (D) in an inspection report DO NOT obligate any party to make repairs or take other actions. The decision to correct a hazard or any deficiency identified in an inspection report is left up to the parties to the contract for the sale or purchase of the home.
+
+This property inspection report may include an inspection agreement (contract), addenda, and other information related to property conditions.
+
+\noindent\textbf{INFORMATION INCLUDED UNDER ``ADDITIONAL INFORMATION PROVIDED BY INSPECTOR'', OR PROVIDED AS AN ATTACHMENT WITH THE STANDARD FORM, IS NOT REQUIRED BY THE COMMISSION AND MAY CONTAIN CONTRACTUAL TERMS BETWEEN THE INSPECTOR AND YOU, AS THE CLIENT. THE COMMISSION DOES NOT REGULATE CONTRACTUAL TERMS BETWEEN PARTIES. IF YOU DO NOT UNDERSTAND THE EFFECT OF ANY CONTRACTUAL TERM CONTAINED IN THIS SECTION OR ANY ATTACHMENTS, CONSULT AN ATTORNEY.}
+
+\clearpage
+
+\subsection*{ADDITIONAL INFORMATION PROVIDED BY INSPECTOR}
+
+\noindent\textbf{Occupancy:} % PYTHON_OCCUPANCY %
+
+\noindent\textbf{In Attendance:} % PYTHON_ATTENDANCE %
+
+\noindent\textbf{Temperature:} % PYTHON_TEMPERATURE %
+
+\noindent\textbf{Type of Building:} % PYTHON_BUILDING_TYPE %
+
+\noindent\textbf{Weather Conditions:} % PYTHON_WEATHER %
+
+\noindent\textbf{The direction the building faces for orientation purposes:} % PYTHON_ORIENTATION %
+
+\noindent\textbf{Inaccessible / obstructed components areas:} % PYTHON_INACCESSIBLE %
+
+\vspace{1em}
+
+\noindent\textbf{Possible hidden damage:}
+
+Where deteriorated or missing caulk/mortar joints, roof coverings/flashing/decking, wall penetrations, high soil, negative drainage, or conducive conditions for wood destroying insects are notated as deficient within structural systems, it should be assumed that moisture penetration may have occurred and hidden damage may be present.
+
+\vspace{1em}
+
+% PYTHON_ADDITIONAL_INFO %
+
+\clearpage
 
 % --- PYTHON CONTENT MARKER ---
 % Your Python script will generate all the LaTeX
@@ -60,6 +181,5 @@
 % LEAVE THIS COMMENT BLOCK HERE
 %
 % --- END PYTHON CONTENT MARKER ---
-
 
 \end{document}
