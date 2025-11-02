@@ -1,18 +1,26 @@
-import asyncio  # For async
+import asyncio
+import hashlib
 import json
-import ssl
-from datetime import datetime
+import os
+import subprocess
+import urllib
 from io import BytesIO
+from typing import Optional
 
-import aiohttp  # For async HTTP requests
-import certifi
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.utils import ImageReader, simpleSplit
-from reportlab.pdfgen import canvas
+import aiohttp
+from PIL import Image  # Requires 'pip install Pillow'
+
+# --- CONFIGURATION (Updated for 'latex' folder) ---
+JSON_FILE = "inspection.json"  # Assumes this is in the root, with the script
+TEMPLATE_FILE = "latex/report.tex"
+FINAL_TEX_FILE = "latex/final_report.tex"
+FINAL_PDF_FILE = "latex/final_report.pdf"
+IMAGE_DIR = "latex/images"  # <-- Images now INSIDE latex folder
+CONTENT_MARKER = "% --- PYTHON CONTENT MARKER ---"
+
+# --- 1. LaTeX Helper Functions ---
 
 
-# --- Helper function for Roman Numerals ---
 def to_roman(n):
     """Converts an integer to a Roman numeral."""
     val = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
@@ -27,366 +35,402 @@ def to_roman(n):
     return roman_num
 
 
-# --- Helper function to draw the static page template ---
-def draw_page_template(c, page_num, total_pages):
-    """Draws the header and footer on every page."""
-    c.saveState()
-    width, height = letter
-
-    # --- Header ---
-    c.setFont("Helvetica", 9)
-    c.drawString(72, height - 40, "Report Identification:")
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(
-        72, height - 55, "I=Inspected   NI=Not Inspected   NP=Not Present   D=Deficient"
-    )
-
-    # --- FOOTER ---
-    c.setFont("Helvetica", 9)
-    c.drawCentredString(width / 2, 60, f"Page {page_num} of {total_pages}")
-    c.setFont("Helvetica", 9)
-    c.drawString(72, 40, f"REI 7-6 ({datetime.now().strftime('%m/%d/%Y')})")
-
-    y_pos = 40
-    text_web = "www.trec.texas.gov"
-    text_phone = "(512) 936-3000"
-    text_intro = "Promulgated by the Texas Real Estate Commission • "
-
-    width_web = c.stringWidth(text_web, "Helvetica", 9)
-    width_phone = c.stringWidth(text_phone, "Helvetica", 9)
-
-    x_pos = width - 72
-    c.drawRightString(x_pos, y_pos, text_web)
-    c.linkURL(
-        f"https://{text_web}",
-        (x_pos - width_web, y_pos - 2, x_pos, y_pos + 9),
-        relative=0,
-    )
-    x_pos -= width_web + c.stringWidth(" • ", "Helvetica", 9)
-
-    c.drawRightString(x_pos, y_pos, text_phone)
-    c.linkURL(
-        f"tel:512-936-3000",
-        (x_pos - width_phone, y_pos - 2, x_pos, y_pos + 9),
-        relative=0,
-    )
-    x_pos -= width_phone + c.stringWidth(" • ", "Helvetica", 9)
-
-    c.drawRightString(x_pos, y_pos, text_intro)
-    c.restoreState()
+def escape_latex(text):
+    """Escapes special LaTeX characters in a string."""
+    if not isinstance(text, str):
+        return ""
+    text = text.replace("\\", r"\textbackslash{}")
+    text = text.replace("_", r"\_")
+    text = text.replace("%", r"\%")
+    text = text.replace("&", r"\&")
+    text = text.replace("#", r"\#")
+    text = text.replace("$", r"\$")
+    text = text.replace("{", r"\{")
+    text = text.replace("}", r"\}")
+    text = text.replace("^", r"\^{}")
+    text = text.replace("~", r"\~{}")
+    return text
 
 
-# --- STEP 1: ASYNC IMAGE DOWNLOADING ---
+def get_checkboxes(status, is_deficient):
+    """Returns the LaTeX string for the 4 checkboxes."""
+    i_box = r"$\square$"
+    ni_box = r"$\square$"
+    np_box = r"$\square$"
+    d_box = r"$\square$"
+
+    if is_deficient:
+        d_box = r"$\boxtimes$"
+    elif status == "I":
+        i_box = r"$\boxtimes$"
+    elif status == "NI":
+        ni_box = r"$\boxtimes$"
+    elif status == "NP":
+        np_box = r"$\boxtimes$"
+
+    return f"{i_box} & {ni_box} & {np_box} & {d_box}"
 
 
-async def fetch_image(session, url):
-    """Fetches a single image URL, returns None on failure."""
-    if not url:
-        return None, None
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-    }
+# Global cache for downloaded images (URL -> filepath)
+IMAGE_CACHE = {}
+CACHE_LOCK = asyncio.Lock()
+
+
+async def download_image_async(
+    session: aiohttp.ClientSession, url: str
+) -> Optional[str]:
+    """
+    Asynchronously downloads an image, checks its REAL format using Pillow,
+    converts unsupported formats (like WEBP) to PNG,
+    saves it to the IMAGE_DIR, and returns the local path.
+    """
+    if not os.path.exists(IMAGE_DIR):
+        os.makedirs(IMAGE_DIR)
+
+    filename_hash = hashlib.md5(url.encode("utf-8")).hexdigest()
+
     try:
-        async with session.get(url, headers=headers) as response:
-            if response.status == 200:
-                return url, await response.read()
-            else:
-                print(f"Warning: Failed to fetch {url}. Status: {response.status}")
-                return url, None
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+
+        async with session.get(url, headers=headers, timeout=30) as response:
+            if response.status != 200:
+                print(f"⚠️  Failed to download {url} (Status: {response.status})")
+                return None
+
+            image_data = await response.read()
+
+            # Use Pillow to identify and process the image format
+            try:
+                img = Image.open(BytesIO(image_data))
+                file_format = img.format.lower() if img.format else "unknown"
+
+                # Convert WEBP and other unsupported formats to PNG
+                if file_format in ["webp", "svg", "bmp", "tiff"]:
+                    ext = ".png"
+                    filepath = os.path.join(IMAGE_DIR, filename_hash + ext)
+
+                    if os.path.exists(filepath):
+                        return filepath
+
+                    # Convert to RGB if necessary
+                    if img.mode in ("RGBA", "LA", "P"):
+                        img = img.convert("RGB")
+
+                    img.save(filepath, "PNG")
+                    print(
+                        f"✓ Converted {file_format.upper()} → PNG: {os.path.basename(filepath)}"
+                    )
+                    return filepath
+
+                if file_format == "jpeg":
+                    ext = ".jpg"
+                elif file_format == "png":
+                    ext = ".png"
+                else:
+                    # Default to PNG for unknown formats
+                    ext = ".png"
+                    filepath = os.path.join(IMAGE_DIR, filename_hash + ext)
+
+                    if os.path.exists(filepath):
+                        return filepath
+
+                    if img.mode in ("RGBA", "LA", "P"):
+                        img = img.convert("RGB")
+
+                    img.save(filepath, "PNG")
+                    print(f"✓ Converted unknown → PNG: {os.path.basename(filepath)}")
+                    return filepath
+
+            except Exception as e:
+                print(
+                    f"⚠️  Could not identify image {url}. Defaulting to .jpg. Error: {e}"
+                )
+                ext = ".jpg"
+
+            filepath = os.path.join(IMAGE_DIR, filename_hash + ext)
+
+            if os.path.exists(filepath):
+                return filepath
+
+            with open(filepath, "wb") as f:
+                f.write(image_data)
+
+        print(f"✓ Downloaded: {os.path.basename(filepath)}")
+        return filepath
+
+    except asyncio.TimeoutError:
+        print(f"⏱️  Timeout downloading {url}")
+        return None
     except Exception as e:
-        print(f"Warning: Could not load image from {url}. Error: {e}")
-        return url, None
+        print(f"⚠️  Failed to download {url}. Error: {e}")
+        return None
 
 
-async def download_all_images(sections):
-    """Finds and downloads all unique image URLs concurrently."""
-    urls = set()
-    for section in sections:
-        for item in section.get("lineItems", []):
-            for comment in item.get("comments", []):
-                for photo in comment.get("photos", []):
-                    if photo.get("url"):
-                        urls.add(photo.get("url"))
-
-    print(f"Found {len(urls)} unique images to download.")
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-    connector = aiohttp.TCPConnector(ssl=ssl_context)
-
-    async with aiohttp.ClientSession(connector=connector) as session:
-        tasks = [fetch_image(session, url) for url in urls]
-        results = await asyncio.gather(*tasks)
-
-    print("All image downloads attempted.")
-    image_cache = {url: data for url, data in results if data}
-    return image_cache
+async def download_and_cache_image(session: aiohttp.ClientSession, url: str):
+    """Downloads an image and caches it in the global IMAGE_CACHE."""
+    filepath = await download_image_async(session, url)
+    async with CACHE_LOCK:
+        IMAGE_CACHE[url] = filepath
 
 
-# --- STEP 2: PDF DRAWING (now uses the cache) ---
+def get_cached_image(url: str) -> Optional[str]:
+    """Gets an image from the cache (blocking call for sync context)."""
+    return IMAGE_CACHE.get(url)
 
 
-def draw_content(c, sections, image_cache, total_pages=1, is_final_pass=False):
+# --- 2. Main Content Generation ---
+
+
+def generate_latex_body(data):
     """
-    A function to draw all the content.
-    Reads images from the pre-filled 'image_cache'.
+    Loops through the JSON data and builds the LaTeX string for the report body.
     """
-    width, height = letter
-    page_number = 1
+    body = []
+    sections = data.get("inspection", {}).get("sections", [])
 
-    if is_final_pass:
-        draw_page_template(c, page_number, total_pages)
-        form = c.acroForm
+    comment_col = r"p{0.7\textwidth}"
 
-    # --- Layout variables ---
-    current_y = height - 75
-    line_height = 18
-    left_margin = 72
-    bottom_margin = 75
-
-    # --- NO LONGER NEED I/NI/NP/D HEADERS ---
-    # c.setFont('Helvetica-Bold', 10)
-    # ...
-
-    # --- Loop through JSON data ---
     for i, section in enumerate(sections, start=1):
-        section_number = to_roman(i)
-        section_name = section.get("name", "Unnamed Section").upper()
+        section_name = escape_latex(section.get("name", "").upper())
+        section_num = to_roman(i)
 
-        # --- Handle Page Breaks ---
-        if current_y < bottom_margin + line_height * 2:
-            c.showPage()
-            page_number += 1
-            if is_final_pass:
-                draw_page_template(c, page_number, total_pages)
-                form = c.acroForm
-            current_y = height - 75
-
-        # --- SECTION CENTERING ---
-        c.setFont("Helvetica-Bold", 11)  # Font Fix
-        c.drawCentredString(width / 2, current_y, f"{section_number}. {section_name}")
-        current_y -= line_height * 1.5
+        body.append(r"\section*{\centering " + f"{section_num}. {section_name}" + "}\n")
 
         line_items = section.get("lineItems", [])
         for j, item in enumerate(line_items, start=0):
             item_letter = chr(ord("A") + j)
-            item_title = item.get("title", "Unnamed Line Item")
+            item_title = escape_latex(item.get("title", ""))
 
-            if current_y < bottom_margin + line_height:
-                c.showPage()
-                page_number += 1
-                if is_final_pass:
-                    draw_page_template(c, page_number, total_pages)
-                    form = c.acroForm
-                current_y = height - 75
+            body.append(r"\subsection*{" + f"{item_letter}. {item_title}" + "}\n")
 
-            # --- Apply I/NI/NP/D logic FROM PARENT ITEM ---
-            # We save this to apply to the comments below
-            i_check, ni_check, np_check, d_check = False, False, False, False
+            status = item.get("inspectionStatus")
             is_deficient = item.get("isDeficient", False)
-            if is_deficient:
-                d_check = True
-            else:
-                status = item.get("inspectionStatus")
-                if status == "I":
-                    i_check = True
-                elif status == "NI":
-                    ni_check = True
-                elif status == "NP":
-                    np_check = True
+            checkbox_str = get_checkboxes(status, is_deficient)
 
-            # --- Draw Line Item Title (No Checkboxes) ---
-            c.setFont("Helvetica-Bold", 10)  # Font Fix
-            c.drawString(left_margin, current_y, f"{item_letter}. {item_title}")
-            current_y -= line_height * 1.2
-
-            # --- Draw Comments (AND PHOTOS) ---
             comments = item.get("comments", [])
             if comments:
-                comment_indent = left_margin + 20  # Indent for comments
-                text_indent = comment_indent + 80  # Indent for text, after checkboxes
+                body.append(r"\begin{tabular}{c c c c " + comment_col + "}")
 
                 for k, comment in enumerate(comments, start=1):
-                    comment_id = comment.get("id", f"{i}-{j}-{k}")
-                    label = comment.get("label", "No comment text")
-                    text_line = f"{k}. {label}"
+                    label_text = f"{k}. {comment.get('label', '')}"
+                    label = r"\textbf{" + escape_latex(label_text) + "}"
+                    body.append(f"{checkbox_str} & {label} \\\\")
 
-                    # --- 1. Calculate height for text ---
-                    lines = simpleSplit(
-                        text_line, "Helvetica", 9, width - text_indent - left_margin
-                    )
-                    required_height = len(lines) * (line_height * 0.8)
-
-                    # --- 2. Calculate height for photos ---
+                    # --- UPDATED LOGIC FOR SAFER IMAGE SIZING ---
+                    # START
                     photos = comment.get("photos", [])
                     if photos:
-                        required_height += line_height * 0.5  # Padding
+                        valid_image_paths = []
                         for photo in photos:
-                            img_data = image_cache.get(photo.get("url"))
-                            if img_data:
-                                try:
-                                    img_reader = ImageReader(BytesIO(img_data))
-                                    img_width, img_height = img_reader.getSize()
-                                    display_width = 2.5 * 72  # 2.5 inches wide
-                                    display_height = display_width * (
-                                        img_height / float(img_width)
-                                    )
-                                    required_height += (
-                                        display_height + line_height * 0.5
-                                    )
-                                except:
-                                    required_height += line_height  # Placeholder height
-                            else:
-                                required_height += line_height  # Placeholder height
-
-                    # --- 3. Check if the whole block fits ---
-                    if current_y - required_height < bottom_margin:
-                        c.showPage()
-                        page_number += 1
-                        if is_final_pass:
-                            draw_page_template(c, page_number, total_pages)
-                            form = c.acroForm
-                        current_y = height - 75
-
-                    # --- 4. Draw the content ---
-
-                    # --- DRAW 4 CHECKBOXES FOR COMMENT ---
-                    # Uses the status from the parent line item
-                    if is_final_pass:
-                        cb_y = current_y - 2
-                        form.checkbox(
-                            name=f"{comment_id}_I",
-                            x=comment_indent + 2,
-                            y=cb_y,
-                            checked=i_check,
-                            buttonStyle="check",
-                            size=10,
-                        )
-                        form.checkbox(
-                            name=f"{comment_id}_NI",
-                            x=comment_indent + 22,
-                            y=cb_y,
-                            checked=ni_check,
-                            buttonStyle="check",
-                            size=10,
-                        )
-                        form.checkbox(
-                            name=f"{comment_id}_NP",
-                            x=comment_indent + 42,
-                            y=cb_y,
-                            checked=np_check,
-                            buttonStyle="check",
-                            size=10,
-                        )
-                        form.checkbox(
-                            name=f"{comment_id}_D",
-                            x=comment_indent + 62,
-                            y=cb_y,
-                            checked=d_check,
-                            buttonStyle="check",
-                            size=10,
-                        )
-
-                    c.setFont("Helvetica", 9)  # Font Fix
-                    for line in lines:
-                        c.drawString(text_indent, current_y, line)
-                        current_y -= line_height * 0.8
-
-                    if photos:
-                        current_y -= line_height * 0.5  # Padding
-                        for photo in photos:
-                            img_data = image_cache.get(photo.get("url"))
-                            if img_data:
-                                try:
-                                    img_reader = ImageReader(BytesIO(img_data))
-                                    img_width, img_height = img_reader.getSize()
-                                    display_width = 2.5 * 72
-                                    display_height = display_width * (
-                                        img_height / float(img_width)
-                                    )
-
-                                    if is_final_pass:
-                                        c.drawImage(
-                                            img_reader,
-                                            x=text_indent,  # Align with text
-                                            y=current_y - display_height,
-                                            width=display_width,
-                                            height=display_height,
-                                            preserveAspectRatio=True,
-                                        )
-                                    current_y -= display_height + line_height * 0.5
-                                except Exception as e:
+                            url = photo.get("url")
+                            if url:
+                                img_path = get_cached_image(url)
+                                if img_path:
+                                    img_filename = os.path.basename(img_path)
+                                    relative_img_path = os.path.join(
+                                        "images", img_filename
+                                    ).replace("\\", "/")
+                                    valid_image_paths.append(relative_img_path)
+                                else:
                                     print(
-                                        f"Warning: Could not draw image {photo.get('url')}. Error: {e}"
+                                        f"⚠️  Image not yet cached, skipping: {url[:60]}..."
                                     )
-                            else:
-                                if is_final_pass:
-                                    c.setFont("Helvetica-Oblique", 9)  # Font Fix
-                                    c.drawString(
-                                        text_indent,
-                                        current_y,
-                                        "[Image failed to load or was forbidden]",
-                                    )
-                                    current_y -= line_height
-                        current_y -= line_height * 0.5
 
-            current_y -= line_height  # Space after line item
+                        if valid_image_paths:
+                            image_latex_parts = []
+                            num_photos = len(valid_image_paths)
 
-    return page_number  # Return the total count
+                            # --- NEW, SAFER SIZES ---
+                            # These widths are smaller and should fit side-by-side
+                            # within the 0.7\textwidth column.
+                            if num_photos == 1:
+                                img_width = "2.5in"
+                            elif num_photos == 2:
+                                img_width = "2.0in"  # Total 4.0in
+                            elif num_photos == 3:
+                                img_width = "1.5in"  # Total 4.5in
+                            else:  # 4 or more
+                                img_width = "1.1in"  # Total 4.4in for 4
+
+                            # --- CRITICAL FIX ---
+                            # Set a maximum height for all images to prevent
+                            # tall/portrait images from running into the footer.
+                            max_img_height = "2.5in"
+
+                            for path in valid_image_paths:
+                                # Use width, max height, and keepaspectratio
+                                # This scales the image to fit BOTH constraints.
+                                image_latex_parts.append(
+                                    r"\includegraphics[width="
+                                    + img_width
+                                    + ", height="
+                                    + max_img_height
+                                    + r", keepaspectratio]{"
+                                    + path
+                                    + "}"
+                                )
+
+                            # Join them with a small horizontal space
+                            all_images_latex = r" \hspace{0.5em} ".join(
+                                image_latex_parts
+                            )
+
+                            # --- CRITICAL FIX ---
+                            # 1. Use {\centering ... \par} to center the images
+                            #    in the table cell.
+                            # 2. Removed the \hspace{1cm} which was pushing
+                            #    images out of the column.
+                            body.append(
+                                r"& & & & "
+                                + r"{\centering "
+                                + all_images_latex
+                                + r" \par} \\[0.5em]"  # Add vertical space after images
+                            )
+
+                    # If the comment has a 'value', display it in a new row
+                    comment_value = comment.get("value")
+                    if comment_value:
+                        value_latex = escape_latex(str(comment_value))
+                        # Span all columns except the first four (checkboxes)
+                        body.append(r"& & & & " + value_latex + r" \\")
+                    # --- UPDATED LOGIC FOR SAFER IMAGE SIZING ---
+                    # END
+
+                body.append(r"\end{tabular}" + "\n")
+
+            body.append(r"\vspace{1.5em}")  # Increased space between items
+
+        body.append(r"\clearpage")
+
+    return "\n".join(body)
 
 
-# --- Main PDF Generation Function ---
-def create_trec_report(json_file_path, output_pdf):
-    # --- 1. Load JSON Data ---
+# --- 3. Main Execution ---
+
+
+async def collect_all_image_urls(data) -> list[str]:
+    """Collects all unique image URLs from the JSON data."""
+    urls = set()
+    sections = data.get("inspection", {}).get("sections", [])
+
+    for section in sections:
+        line_items = section.get("lineItems", [])
+        for item in line_items:
+            comments = item.get("comments", [])
+            for comment in comments:
+                photos = comment.get("photos", [])
+                for photo in photos:
+                    url = photo.get("url")
+                    if url:
+                        urls.add(url)
+
+    return list(urls)
+
+
+async def download_images_background(urls: list[str]):
+    """Downloads all images in the background concurrently."""
+    if not urls:
+        return
+
+    print(f"\n🚀 Starting background download of {len(urls)} images...")
+
+    timeout = aiohttp.ClientTimeout(total=60, connect=10)
+    connector = aiohttp.TCPConnector(limit=10)  # Max 10 concurrent connections
+
+    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+        tasks = [download_and_cache_image(session, url) for url in urls]
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    successful = sum(1 for path in IMAGE_CACHE.values() if path is not None)
+    print(f"✅ Downloaded {successful}/{len(urls)} images successfully\n")
+
+
+async def main_async():
+    """Main async function that downloads images while building the report."""
+    print(f"Loading JSON data from {JSON_FILE}...")
     try:
-        with open(json_file_path, "r", encoding="utf-8") as f:
+        with open(JSON_FILE, "r") as f:
             data = json.load(f)
+    except Exception as e:
+        print(f"Error loading {JSON_FILE}: {e}")
+        return
+
+    print(f"Loading LaTeX template from {TEMPLATE_FILE}...")
+    try:
+        with open(TEMPLATE_FILE, "r") as f:
+            template_content = f.read()
+    except Exception as e:
+        print(f"Error loading {TEMPLATE_FILE}: {e}")
+        return
+
+    # Collect all image URLs
+    print("📥 Collecting image URLs...")
+    image_urls = await collect_all_image_urls(data)
+    print(f"Found {len(image_urls)} unique images")
+
+    # Download all images first before generating the report
+    print("⏳ Downloading all images...")
+    await download_images_background(image_urls)
+
+    # Generate report body with all cached images
+    print("📝 Generating report body with all images...")
+    report_body = generate_latex_body(data)
+
+    final_content = template_content.replace(CONTENT_MARKER, report_body)
+
+    print(f"💾 Saving populated LaTeX to {FINAL_TEX_FILE}...")
+    os.makedirs(os.path.dirname(FINAL_TEX_FILE), exist_ok=True)
+    with open(FINAL_TEX_FILE, "w") as f:
+        f.write(final_content)
+
+    print("\n📄 Running pdflatex (Pass 1)...")
+    try:
+        run_directory = os.path.dirname(FINAL_TEX_FILE)
+        if run_directory == "":
+            run_directory = "."
+
+        tex_filename_only = os.path.basename(FINAL_TEX_FILE)
+
+        # Run from within the 'latex/' directory
+        subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", tex_filename_only],
+            check=True,
+            cwd=run_directory,
+        )
+
+        print("📄 Running pdflatex (Pass 2)...")
+        subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", tex_filename_only],
+            check=True,
+            cwd=run_directory,
+        )
+
+        print("\n✅ Done! ✅")
+        print(f"Successfully generated {FINAL_PDF_FILE}")
+
+    except subprocess.CalledProcessError:
+        print(f"\n❌ PDFLATEX FAILED ❌")
+        print(
+            f"A LaTeX error occurred. Python script is OK, but the .tex file is invalid."
+        )
+        print(
+            f"To find the error, open the file 'latex/final_report.log' and scroll to the bottom."
+        )
+        print(f"Look for a line starting with '!'")
+
     except FileNotFoundError:
-        print(f"Error: The file '{json_file_path}' was not found.")
-        return
-    except json.JSONDecodeError:
-        print(f"Error: The file '{json_file_path}' is not a valid JSON file.")
-        return
-
-    sections = data.get("inspection", {}).get("sections")
-    if not sections:
-        print("Error: 'inspection' or 'sections' key not found.")
-        return
-
-    # --- 2. STEP 1: Download all images concurrently ---
-    print("--- Starting concurrent image download ---")
-    image_cache = asyncio.run(download_all_images(sections))
-    print(f"--- Successfully cached {len(image_cache)} images ---")
-
-    # --- 3. PASS 1 (Dry Run) ---
-    print("--- Starting PDF Pass 1 (Counting pages) ---")
-    dummy_buffer = BytesIO()
-    c_dry_run = canvas.Canvas(dummy_buffer, pagesize=letter)
-    total_page_count = draw_content(
-        c_dry_run, sections, image_cache, is_final_pass=False
-    )
-    c_dry_run.save()
-    dummy_buffer.close()
-
-    print(f"Report has a total of {total_page_count} pages.")
-
-    # --- 4. PASS 2 (Final Render) ---
-    print("--- Starting PDF Pass 2 (Drawing final file) ---")
-    c_final = canvas.Canvas(output_pdf, pagesize=letter)
-    draw_content(
-        c_final, sections, image_cache, total_pages=total_page_count, is_final_pass=True
-    )
-    c_final.save()
-
-    print(f"Successfully created fillable PDF: {output_pdf}")
+        print("\n❌ PDFLATEX NOT FOUND ❌")
+        print(
+            "Error: 'pdflatex' command not found. Is TeX Live (or MiKTeX) installed and in your system's PATH?"
+        )
 
 
-# --- ---
-# HOW TO RUN
-# --- ---
-# 1. Make sure 'inspection.json' is in the same folder.
-# 2. Install required libraries: pip install reportlab aiohttp certifi
-# 3. Run this script.
-# 4. Open 'final_report.pdf' in Adobe Acrobat Reader.
+def main():
+    """Entry point - runs the async main function."""
+    asyncio.run(main_async())
 
-json_filename = "inspection.json"
-output_filename = "final_report.pdf"
-create_trec_report(json_filename, output_filename)
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,63 @@
+\documentclass[letterpaper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=0.75in, includefoot]{geometry} 
+\usepackage{fancyhdr}
+\usepackage{lastpage}      % For the "of Y" page count
+\usepackage{datetime}
+\usepackage[hidelinks]{hyperref}
+\usepackage{graphicx} 
+\usepackage{array}    
+\usepackage{textcomp}      % For the \textbullet command
+\usepackage{amssymb}       % For the \square and \boxtimes checkbox symbols
+
+% Set the header height
+\setlength{\headheight}{23pt} 
+% --- FIX #2: Add space for the tall footer ---
+\setlength{\footskip}{60pt} 
+
+
+% --- DOCUMENT STARTS HERE ---
+\begin{document}
+
+% All fancyhdr setup goes INSIDE \begin{document}
+\pagestyle{fancy}
+\fancyhf{} % Clear all default header/footer fields
+
+% --- HEADER ---
+\fancyhead[L]{%
+    Report Identification: \\
+    \textbf{I=Inspected \quad NI=Not Inspected \quad NP=Not Present \quad D=Deficient}
+}
+\renewcommand{\headrulewidth}{0pt} % No line under the header
+
+% --- FOOTER ---
+\fancyfoot[L]{REI 7-6 (\mmddyyyydate\today)}
+\fancyfoot[C]{} % Keep center empty
+\fancyfoot[R]{%
+    Promulgated by the Texas Real Estate Commission \textbullet{} 
+    \href{tel:512-936-3000}{(512) 936-3000} \textbullet{} 
+    \href{https://www.trec.texas.gov}{www.trec.texas.gov}
+}
+\renewcommand{\footrule}{%
+    \vspace{5pt} 
+    \begin{center}
+        Page \thepage\ of \pageref{LastPage}
+    \end{center}
+    \vspace{2pt} 
+    \hrulefill 
+    \vspace{2pt} 
+}
+% --- END HEADER/FOOTER SETUP ---
+
+
+% --- PYTHON CONTENT MARKER ---
+% Your Python script will generate all the LaTeX
+% code that goes in this section.
+%
+% LEAVE THIS COMMENT BLOCK HERE
+%
+% --- END PYTHON CONTENT MARKER ---
+
+
+\end{document}
